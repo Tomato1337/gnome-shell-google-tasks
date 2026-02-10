@@ -1,0 +1,107 @@
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+// @ts-expect-error: Goa types are not available
+import Goa from 'gi://Goa';
+// @ts-expect-error: Soup types are not available
+import Soup from 'gi://Soup?version=3.0';
+
+export interface GoogleTask {
+  id: string;
+  title: string;
+  status: string;
+}
+
+export interface GoogleTaskList {
+  id: string;
+  title: string;
+}
+
+interface GoogleTasksResponse {
+  items?: GoogleTask[];
+}
+
+interface GoogleTaskListsResponse {
+  items?: GoogleTaskList[];
+}
+
+Gio._promisify(Goa.Client, 'new', 'new_finish');
+Gio._promisify(Goa.OAuth2Based.prototype, 'call_get_access_token', 'call_get_access_token_finish');
+Gio._promisify(Soup.Session.prototype, 'send_and_read_async', 'send_and_read_finish');
+
+export class GoogleTasksManager {
+  private _cancellable: Gio.Cancellable;
+  private _httpSession: Soup.Session;
+
+  constructor() {
+    this._cancellable = new Gio.Cancellable();
+    this._httpSession = new Soup.Session();
+  }
+
+  async getTasks(): Promise<GoogleTask[]> {
+    try {
+      const client = await Goa.Client.new(this._cancellable);
+      const accounts = client.get_accounts();
+      const googleAccount = accounts.find((acc: any) => acc.get_account().provider_type === 'google');
+      if (!googleAccount) {
+        console.warn('Google Tasks: No Google account found in Online Accounts');
+        return [];
+      }
+      const oauth2 = googleAccount.get_oauth2_based();
+      if (!oauth2) {
+        console.warn('Google Tasks: Google account does not support OAuth2');
+        return [];
+      }
+      const [accessToken] = await oauth2.call_get_access_token(this._cancellable);
+
+      // Get Task Lists
+      const listsUrl = 'https://tasks.googleapis.com/tasks/v1/users/@me/lists';
+      const listsData = await this._jsonRequest<GoogleTaskListsResponse>(listsUrl, accessToken);
+
+      let allTasks: GoogleTask[] = [];
+      if (listsData.items) {
+        for (const list of listsData.items) {
+          const tasksUrl = `https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?showCompleted=false&showHidden=false`;
+          try {
+            const tasksData = await this._jsonRequest<GoogleTasksResponse>(tasksUrl, accessToken);
+            if (tasksData.items) {
+              allTasks = allTasks.concat(tasksData.items);
+            }
+          }
+          catch (error) {
+            console.error(`Google Tasks: Failed to fetch tasks for list ${list.title}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+      return allTasks;
+    }
+    catch (e) {
+      if (e instanceof GLib.Error && !e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
+        console.error(`Google Tasks Error: ${e.message}`);
+      }
+      else if (e instanceof Error) {
+        console.error(`Google Tasks Error: ${e.message}`);
+      }
+      return [];
+    }
+  }
+
+  async _jsonRequest<T>(url: string, token: string): Promise<T> {
+    const message = Soup.Message.new('GET', url);
+    message.request_headers.append('Authorization', `Bearer ${token}`);
+    const bytes = await this._httpSession.send_and_read_async(message, GLib.PRIORITY_DEFAULT, this._cancellable);
+    const status = message.get_status();
+    if (status !== 200) {
+      throw new Error(`HTTP ${status}: ${message.get_reason_phrase()}`);
+    }
+    const data = bytes.get_data();
+    if (!data)
+      throw new Error('No data received');
+
+    const body = new TextDecoder().decode(data);
+    return JSON.parse(body) as T;
+  }
+
+  destroy() {
+    this._cancellable.cancel();
+  }
+}

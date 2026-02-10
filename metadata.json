@@ -1,0 +1,8 @@
+{
+  "name": "Google Tasks",
+  "description": "Show a google tasks panel in the notification center",
+  "uuid": "googletasks@ztluwu.dev",
+  "shell-version": [
+    "49"
+  ]
+}
