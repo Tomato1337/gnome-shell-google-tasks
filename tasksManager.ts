@@ -38,21 +38,22 @@ export class GoogleTasksManager {
     this._httpSession = new Soup.Session();
   }
 
+  private async _getAccessToken(): Promise<string> {
+    const client = await Goa.Client.new(this._cancellable);
+    const accounts = client.get_accounts();
+    const googleAccount = accounts.find((acc: any) => acc.get_account().provider_type === 'google');
+    if (!googleAccount)
+      throw new Error('No Google account found in Online Accounts');
+    const oauth2 = googleAccount.get_oauth2_based();
+    if (!oauth2)
+      throw new Error('Google account does not support OAuth2');
+    const [accessToken] = await oauth2.call_get_access_token(this._cancellable);
+    return accessToken;
+  }
+
   async getTasks(): Promise<GoogleTask[]> {
     try {
-      const client = await Goa.Client.new(this._cancellable);
-      const accounts = client.get_accounts();
-      const googleAccount = accounts.find((acc: any) => acc.get_account().provider_type === 'google');
-      if (!googleAccount) {
-        console.warn('Google Tasks: No Google account found in Online Accounts');
-        return [];
-      }
-      const oauth2 = googleAccount.get_oauth2_based();
-      if (!oauth2) {
-        console.warn('Google Tasks: Google account does not support OAuth2');
-        return [];
-      }
-      const [accessToken] = await oauth2.call_get_access_token(this._cancellable);
+      const accessToken = await this._getAccessToken();
 
       // Get Task Lists
       const listsUrl = 'https://tasks.googleapis.com/tasks/v1/users/@me/lists';
@@ -87,17 +88,29 @@ export class GoogleTasksManager {
     }
   }
 
+  async createTask(title: string): Promise<void> {
+    try {
+      const accessToken = await this._getAccessToken();
+
+      // Get the first task list
+      const listsUrl = 'https://tasks.googleapis.com/tasks/v1/users/@me/lists';
+      const listsData = await this._jsonRequest<GoogleTaskListsResponse>(listsUrl, accessToken);
+      if (!listsData.items || listsData.items.length === 0)
+        throw new Error('No task lists found');
+
+      const taskListId = listsData.items[0].id;
+      const url = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks`;
+      await this._jsonRequest(url, accessToken, 'POST', { title });
+    }
+    catch (e) {
+      console.error(`Google Tasks: Failed to create task: ${e instanceof Error ? e.message : String(e)}`);
+      throw e;
+    }
+  }
+
   async completeTask(taskListId: string, taskId: string): Promise<void> {
     try {
-      const client = await Goa.Client.new(this._cancellable);
-      const accounts = client.get_accounts();
-      const googleAccount = accounts.find((acc: any) => acc.get_account().provider_type === 'google');
-      if (!googleAccount)
-        throw new Error('No Google account found');
-      const oauth2 = googleAccount.get_oauth2_based();
-      if (!oauth2)
-        throw new Error('OAuth2 not available');
-      const [accessToken] = await oauth2.call_get_access_token(this._cancellable);
+      const accessToken = await this._getAccessToken();
 
       const url = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks/${taskId}`;
       await this._jsonRequest(url, accessToken, 'PATCH', { status: 'completed' });

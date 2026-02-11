@@ -8,11 +8,68 @@ import St from 'gi://St';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
 
 import { GoogleTasksManager } from './tasksManager.js';
 
+const AddTaskDialog = GObject.registerClass({
+  GTypeName: 'GoogleTasksAddTaskDialog',
+  Signals: {
+    'task-created': { param_types: [GObject.TYPE_STRING] },
+  },
+}, class AddTaskDialog extends ModalDialog.ModalDialog {
+  private _entry!: St.Entry;
+
+  _init() {
+    super._init({
+      styleClass: 'google-tasks-add-dialog',
+      destroyOnClose: true,
+    });
+
+    const titleLabel = new St.Label({
+      text: 'New Task',
+      style_class: 'google-tasks-dialog-title',
+    });
+    this.contentLayout.add_child(titleLabel);
+
+    this._entry = new St.Entry({
+      style_class: 'google-tasks-dialog-entry',
+      hint_text: 'Task title',
+      can_focus: true,
+      x_expand: true,
+    });
+    this.contentLayout.add_child(this._entry);
+
+    this.setButtons([
+      {
+        label: 'Cancel',
+        action: () => this.close(),
+        key: Clutter.KEY_Escape,
+      },
+      {
+        label: 'Save',
+        default: true,
+        action: () => this._onAdd(),
+      },
+    ]);
+
+    this.setInitialKeyFocus(this._entry);
+  }
+
+  _onAdd() {
+    const text = this._entry.get_text().trim();
+    if (text.length > 0) {
+      this.emit('task-created', text);
+    }
+    this.close();
+  }
+});
+
 const TasksSection = GObject.registerClass({
   GTypeName: 'GoogleTasksSection',
+  Signals: {
+    'add-task-clicked': {},
+  },
 }, class TasksSection extends St.Button {
   private _titleLabel!: St.Label;
   private _tasksList!: St.BoxLayout;
@@ -41,7 +98,22 @@ const TasksSection = GObject.registerClass({
       y_align: Clutter.ActorAlign.END,
     });
 
+    const addButton = new St.Button({
+      style_class: 'google-tasks-add-button',
+      can_focus: true,
+      y_align: Clutter.ActorAlign.CENTER,
+      child: new St.Icon({
+        icon_name: 'list-add-symbolic',
+        icon_size: 15,
+      }),
+    });
+    addButton.connect('clicked', () => {
+      this.emit('add-task-clicked');
+      return Clutter.EVENT_STOP;
+    });
+
     titleBox.add_child(this._titleLabel);
+    titleBox.add_child(addButton);
     box.add_child(titleBox);
 
     this._tasksList = new St.BoxLayout({
@@ -140,8 +212,34 @@ export default class GoogleTasksExtension extends Extension {
       dateMenu.menu.close();
     });
 
+    this._tasksSection.connect('add-task-clicked', () => {
+      dateMenu.menu.close();
+      this._showAddTaskDialog();
+    });
+
     this._refreshTasks();
     this._startRefreshTimer();
+  }
+
+  _showAddTaskDialog() {
+    const dialog = new AddTaskDialog();
+    dialog.connect('task-created', (_dialog: any, title: string) => {
+      this._onAddTask(title);
+    });
+    dialog.open();
+  }
+
+  async _onAddTask(title: string) {
+    if (!this._tasksManager)
+      return;
+
+    try {
+      await this._tasksManager.createTask(title);
+      this._refreshTasks();
+    }
+    catch (e) {
+      console.error(`Google Tasks: Failed to add task: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   _startRefreshTimer() {
