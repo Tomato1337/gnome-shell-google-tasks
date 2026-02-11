@@ -1,7 +1,38 @@
 .tasks-list {
-    spacing: 6px;
+    spacing: 4px;
 }
 
 .task-box {
     padding: 4px 0;
+    spacing: 8px;
+}
+
+.task-radio {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    border-radius: 99px;
+    background-color: transparent;
+}
+
+.task-radio:hover {
+    border-color: rgba(255, 255, 255, 0.9);
+}
+
+.task-radio-check {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.task-radio-completed {
+    background-color: rgba(255, 255, 255, 0.8);
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+.task-label {
+    font-size: 14px;
+}
+
+.task-label-completed {
+    text-decoration: line-through;
+    color: rgba(255, 255, 255, 0.4);
 }

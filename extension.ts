@@ -1,6 +1,8 @@
 import type { GoogleTask } from './tasksManager.js';
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
@@ -18,8 +20,9 @@ const TasksSection = GObject.registerClass({
   _init() {
     super._init({
       style_class: 'weather-button',
-      can_focus: true,
       x_expand: true,
+      can_focus: false,
+      layout_manager: new Clutter.BoxLayout({ orientation: Clutter.Orientation.VERTICAL }),
     });
 
     const box = new St.BoxLayout({
@@ -27,7 +30,7 @@ const TasksSection = GObject.registerClass({
       orientation: Clutter.Orientation.VERTICAL,
       x_expand: true,
     });
-    this.set_child(box);
+    this.add_child(box);
 
     const titleBox = new St.BoxLayout({ style_class: 'weather-header-box' });
     this._titleLabel = new St.Label({
@@ -50,15 +53,49 @@ const TasksSection = GObject.registerClass({
     box.add_child(this._tasksList);
   }
 
-  addTask(summary: string) {
+  addTask(task: GoogleTask, onComplete?: (task: GoogleTask) => void) {
     const box = new St.BoxLayout({
       style_class: 'task-box',
-      orientation: Clutter.Orientation.VERTICAL,
+      orientation: Clutter.Orientation.HORIZONTAL,
+      y_align: Clutter.ActorAlign.CENTER,
     });
 
-    box.add_child(new St.Label({
-      text: summary,
-    }));
+    const radio = new St.Button({
+      style_class: 'task-radio',
+      can_focus: true,
+      y_align: Clutter.ActorAlign.CENTER,
+    });
+
+    const checkIcon = new St.Icon({
+      icon_name: 'object-select-symbolic',
+      style_class: 'task-radio-check',
+      icon_size: 8,
+    });
+    checkIcon.opacity = 0;
+    radio.set_child(checkIcon);
+
+    radio.connect('notify::hover', () => {
+      if (!radio.has_style_class_name('task-radio-completed'))
+        checkIcon.opacity = radio.hover ? 255 : 0;
+    });
+
+    const label = new St.Label({
+      text: task.title,
+      style_class: 'task-label',
+      y_align: Clutter.ActorAlign.CENTER,
+    });
+
+    radio.connect('clicked', () => {
+      radio.add_style_class_name('task-radio-completed');
+      checkIcon.opacity = 255;
+      label.add_style_class_name('task-label-completed');
+      radio.reactive = false;
+      if (onComplete)
+        onComplete(task);
+    });
+
+    box.add_child(radio);
+    box.add_child(label);
 
     this._tasksList.add_child(box);
   }
@@ -70,9 +107,12 @@ const TasksSection = GObject.registerClass({
 
 type TasksSectionInstance = InstanceType<typeof TasksSection>;
 
+const REFRESH_INTERVAL_SECONDS = 20; // 20 seconds
+
 export default class GoogleTasksExtension extends Extension {
   private _tasksSection: TasksSectionInstance | null = null;
   private _tasksManager: GoogleTasksManager | null = null;
+  private _refreshTimerId: number | null = null;
 
   enable() {
     this._tasksSection = new TasksSection();
@@ -95,7 +135,28 @@ export default class GoogleTasksExtension extends Extension {
         parent.add_child(this._tasksSection);
     }
 
+    this._tasksSection.connect('clicked', () => {
+      Gio.AppInfo.launch_default_for_uri('https://tasks.google.com/', null);
+      dateMenu.menu.close();
+    });
+
     this._refreshTasks();
+    this._startRefreshTimer();
+  }
+
+  _startRefreshTimer() {
+    this._stopRefreshTimer();
+    this._refreshTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, REFRESH_INTERVAL_SECONDS, () => {
+      this._refreshTasks();
+      return GLib.SOURCE_CONTINUE;
+    });
+  }
+
+  _stopRefreshTimer() {
+    if (this._refreshTimerId !== null) {
+      GLib.source_remove(this._refreshTimerId);
+      this._refreshTimerId = null;
+    }
   }
 
   async _refreshTasks() {
@@ -113,18 +174,37 @@ export default class GoogleTasksExtension extends Extension {
     this._tasksSection.clearTasks();
 
     if (tasks.length === 0) {
-      this._tasksSection.addTask('No tasks found');
+      this._tasksSection.addTask({ id: '', title: 'No tasks found', status: 'none' });
     }
     else {
       for (const task of tasks) {
         if (task.title) {
-          this._tasksSection.addTask(task.title);
+          this._tasksSection.addTask(task, t => this._onTaskCompleted(t));
         }
       }
     }
   }
 
+  async _onTaskCompleted(task: GoogleTask) {
+    if (!this._tasksManager || !task.taskListId)
+      return;
+
+    try {
+      await this._tasksManager.completeTask(task.taskListId, task.id);
+      // Brief delay so the completed animation is visible before refreshing
+      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+        this._refreshTasks();
+        return GLib.SOURCE_REMOVE;
+      });
+    }
+    catch (e) {
+      console.error(`Google Tasks: Failed to mark task completed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   disable() {
+    this._stopRefreshTimer();
+
     if (this._tasksManager) {
       this._tasksManager.destroy();
       this._tasksManager = null;

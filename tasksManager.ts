@@ -9,6 +9,7 @@ export interface GoogleTask {
   id: string;
   title: string;
   status: string;
+  taskListId?: string;
 }
 
 export interface GoogleTaskList {
@@ -64,7 +65,8 @@ export class GoogleTasksManager {
           try {
             const tasksData = await this._jsonRequest<GoogleTasksResponse>(tasksUrl, accessToken);
             if (tasksData.items) {
-              allTasks = allTasks.concat(tasksData.items);
+              const tasksWithListId = tasksData.items.map(t => ({ ...t, taskListId: list.id }));
+              allTasks = allTasks.concat(tasksWithListId);
             }
           }
           catch (error) {
@@ -85,20 +87,48 @@ export class GoogleTasksManager {
     }
   }
 
-  async _jsonRequest<T>(url: string, token: string): Promise<T> {
-    const message = Soup.Message.new('GET', url);
+  async completeTask(taskListId: string, taskId: string): Promise<void> {
+    try {
+      const client = await Goa.Client.new(this._cancellable);
+      const accounts = client.get_accounts();
+      const googleAccount = accounts.find((acc: any) => acc.get_account().provider_type === 'google');
+      if (!googleAccount)
+        throw new Error('No Google account found');
+      const oauth2 = googleAccount.get_oauth2_based();
+      if (!oauth2)
+        throw new Error('OAuth2 not available');
+      const [accessToken] = await oauth2.call_get_access_token(this._cancellable);
+
+      const url = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks/${taskId}`;
+      await this._jsonRequest(url, accessToken, 'PATCH', { status: 'completed' });
+    }
+    catch (e) {
+      console.error(`Google Tasks: Failed to complete task: ${e instanceof Error ? e.message : String(e)}`);
+      throw e;
+    }
+  }
+
+  async _jsonRequest<T>(url: string, token: string, method: string = 'GET', body?: object): Promise<T> {
+    const message = Soup.Message.new(method, url);
     message.request_headers.append('Authorization', `Bearer ${token}`);
-    const bytes = await this._httpSession.send_and_read_async(message, GLib.PRIORITY_DEFAULT, this._cancellable);
+
+    if (body) {
+      const bodyStr = JSON.stringify(body);
+      const bytes = GLib.Bytes.new(new TextEncoder().encode(bodyStr));
+      message.set_request_body_from_bytes('application/json', bytes);
+    }
+
+    const responseBytes = await this._httpSession.send_and_read_async(message, GLib.PRIORITY_DEFAULT, this._cancellable);
     const status = message.get_status();
     if (status !== 200) {
       throw new Error(`HTTP ${status}: ${message.get_reason_phrase()}`);
     }
-    const data = bytes.get_data();
+    const data = responseBytes.get_data();
     if (!data)
       throw new Error('No data received');
 
-    const body = new TextDecoder().decode(data);
-    return JSON.parse(body) as T;
+    const responseBody = new TextDecoder().decode(data);
+    return JSON.parse(responseBody) as T;
   }
 
   destroy() {
