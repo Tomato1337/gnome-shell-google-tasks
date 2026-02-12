@@ -3,7 +3,7 @@ import GLib from 'gi://GLib';
 // @ts-expect-error: Goa types are not available
 import Goa from 'gi://Goa';
 // @ts-expect-error: Soup types are not available
-import Soup from 'gi://Soup?version=3.0';
+import Soup from 'gi://Soup';
 
 export interface GoogleTask {
   id: string;
@@ -142,7 +142,6 @@ export class GoogleTasksManager {
     }
     catch (e) {
       console.error(`Google Tasks: Failed to create task: ${e instanceof Error ? e.message : String(e)}`);
-      throw e;
     }
   }
 
@@ -155,7 +154,6 @@ export class GoogleTasksManager {
     }
     catch (e) {
       console.error(`Google Tasks: Failed to complete task: ${e instanceof Error ? e.message : String(e)}`);
-      throw e;
     }
   }
 
@@ -171,7 +169,6 @@ export class GoogleTasksManager {
     }
     catch (e) {
       console.error(`Google Tasks: Failed to update task: ${e instanceof Error ? e.message : String(e)}`);
-      throw e;
     }
   }
 

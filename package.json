@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc",
     "lint": "eslint",
-    "lint:fix": "eslint --fix"
+    "lint:fix": "eslint --fix",
+    "lint:dist": "eslint dist --fix --no-ignore"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"

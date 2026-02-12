@@ -1,12 +1,22 @@
 <div align="center">
-
-  # Google Tasks for Gnome
-
-  A Gnome shell extension to manage your [Google Tasks](https://tasks.google.com) directly from a notification panel widget.
-
-  <img src="assets/screenshot.png" alt="Google Tasks for Gnome Screenshot" width="600">
-
+  <img src="assets/screenshot.png" alt="Google Tasks for Gnome Screenshot">
 </div>
+
+# Google Tasks for Gnome
+
+![Gnome Extensions Downloads](https://img.shields.io/gnome-extensions/dt/googletasks%40ztluwu.dev?color=57a8ff) ![GitHub Release](https://img.shields.io/github/v/release/ZTL-UwU/gnome-shell-google-tasks?color=52d794)
+
+A Gnome shell extension to manage your [Google Tasks](https://tasks.google.com) directly from a notification panel widget. _This extension is not affiliated, funded, or in any way associated with Google._
+
+
+## Installation
+
+[<img width="200" src="https://github.com/andyholmes/gnome-shell-extensions-badge/raw/master/get-it-on-ego.png">](https://extensions.gnome.org/extension/9322/google-tasks/)
+
+## Usage
+
+1. Log in to Gnome Online Accounts with your Google account **(Settings > Online Accounts)**. Make sure "Tasks" is enabled in the OAuth permissions.
+2. Open the notification panel by clicking on the clock in the top bar or pressing `Super + V`.
 
 ## Features
 

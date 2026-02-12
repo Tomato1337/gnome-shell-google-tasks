@@ -1,7 +1,7 @@
 UUID = googletasks@ztluwu.dev
 DIST_ASSETS = dist/metadata.json dist/stylesheet.css
 
-.PHONY: all pack install clean
+.PHONY: all lint-dist pack install clean
 
 all: dist/extension.js $(DIST_ASSETS)
 
@@ -17,8 +17,11 @@ dist/metadata.json: metadata.json
 dist/stylesheet.css: src/stylesheet.css
 	@cp src/stylesheet.css dist/
 
-$(UUID).zip: dist/extension.js $(DIST_ASSETS)
+$(UUID).zip: lint-dist dist/extension.js $(DIST_ASSETS)
 	@(cd dist && zip ../$(UUID).zip -9r .)
+
+lint-dist: dist/extension.js $(DIST_ASSETS)
+	-bun run lint:dist
 
 pack: $(UUID).zip
 

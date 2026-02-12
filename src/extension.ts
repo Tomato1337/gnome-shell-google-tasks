@@ -372,6 +372,7 @@ export default class GoogleTasksExtension extends Extension {
   private _tasksSection: TasksSectionInstance | null = null;
   private _tasksManager: GoogleTasksManager | null = null;
   private _refreshTimerId: number | null = null;
+  private _taskCompleteRefreshTimerId: number | null = null;
   private _selectedTaskListId: string | null = null;
   private _taskLists: GoogleTaskList[] = [];
   private _tasksByListId: Map<string, GoogleTask[]> = new Map();
@@ -444,6 +445,22 @@ export default class GoogleTasksExtension extends Extension {
     if (this._refreshTimerId !== null) {
       GLib.source_remove(this._refreshTimerId);
       this._refreshTimerId = null;
+    }
+  }
+
+  _scheduleTaskCompleteRefresh() {
+    this._stopTaskCompleteRefreshTimer();
+    this._taskCompleteRefreshTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+      this._taskCompleteRefreshTimerId = null;
+      this._refreshTasks();
+      return GLib.SOURCE_REMOVE;
+    });
+  }
+
+  _stopTaskCompleteRefreshTimer() {
+    if (this._taskCompleteRefreshTimerId !== null) {
+      GLib.source_remove(this._taskCompleteRefreshTimerId);
+      this._taskCompleteRefreshTimerId = null;
     }
   }
 
@@ -537,10 +554,7 @@ export default class GoogleTasksExtension extends Extension {
     try {
       await this._tasksManager.completeTask(task.taskListId, task.id);
       // Brief delay so the completed animation is visible before refreshing
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
-        this._refreshTasks();
-        return GLib.SOURCE_REMOVE;
-      });
+      this._scheduleTaskCompleteRefresh();
     }
     catch (e) {
       console.error(`Google Tasks: Failed to mark task completed: ${e instanceof Error ? e.message : String(e)}`);
@@ -549,6 +563,7 @@ export default class GoogleTasksExtension extends Extension {
 
   disable() {
     this._stopRefreshTimer();
+    this._stopTaskCompleteRefreshTimer();
 
     this._selectedTaskListId = null;
     this._taskLists = [];
