@@ -1,5 +1,6 @@
 .tasks-list {
     spacing: 4px;
+    padding: 4px 4px 0 4px;
 }
 
 .task-box {
@@ -44,9 +45,9 @@
 }
 
 .google-tasks-add-button {
-    border-radius: 99px;
-    width: 20px;
-    height: 20px;
+    border-radius: 8px;
+    width: 28px;
+    height: 28px;
     color: rgba(255, 255, 255, 0.7);
 }
 
@@ -66,7 +67,7 @@
 }
 
 .task-edit-button {
-    border-radius: 99px;
+    border-radius: 6px;
     width: 20px;
     height: 20px;
     color: rgba(255, 255, 255, 0.6);
@@ -77,36 +78,17 @@
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-.google-tasks-tabs {
-    spacing: 0px;
-    padding: 2px;
-    background-color: rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    margin-top: 2px;
-}
-
-.google-tasks-tab {
-    padding: 4px 10px;
-    border-radius: 6px;
-    color: rgba(255, 255, 255, 0.6);
-    background-color: transparent;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 700;
-    margin: 2px;
-}
-
-.google-tasks-tab:hover {
+.google-tasks-dropdown-button {
+    padding: 6px 10px;
+    border-radius: 8px;
     color: rgba(255, 255, 255, 0.9);
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: rgba(255, 255, 255, 0.08);
+    text-align: left;
+    font-size: 13px;
+    font-weight: 800;
 }
 
-.google-tasks-tab-active {
-    color: rgba(255, 255, 255, 0.95);
-    background-color: rgba(255, 255, 255, 0.1);
+.google-tasks-dropdown-button:hover {
+    background-color: rgba(255, 255, 255, 0.12);
 }
 
-.google-tasks-tab-active:hover {
-    color: rgba(255, 255, 255, 1);
-    background-color: rgba(255, 255, 255, 0.05);
-}

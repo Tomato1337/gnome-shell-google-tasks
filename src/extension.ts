@@ -8,6 +8,7 @@ import St from 'gi://St';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { GoogleTasksManager } from './tasksManager.js';
 
@@ -148,8 +149,10 @@ const TasksSection = GObject.registerClass({
     'add-task-clicked': {},
   },
 }, class TasksSection extends St.Button {
-  private _titleLabel!: St.Label;
-  private _tabsBox!: St.BoxLayout;
+  private _taskListDropdownButton!: St.Button;
+  private _taskListDropdownLabel!: St.Label;
+  private _taskListDropdownMenu!: PopupMenu.PopupMenu;
+  private _taskListDropdownMenuManager!: PopupMenu.PopupMenuManager;
   private _tasksList!: St.BoxLayout;
 
   _init() {
@@ -168,12 +171,43 @@ const TasksSection = GObject.registerClass({
     this.add_child(box);
 
     const titleBox = new St.BoxLayout({ style_class: 'weather-header-box' });
-    this._titleLabel = new St.Label({
-      style_class: 'weather-header',
-      text: 'Google Tasks',
-      x_align: Clutter.ActorAlign.START,
+
+    this._taskListDropdownLabel = new St.Label({
+      text: 'Task Lists',
+      y_align: Clutter.ActorAlign.CENTER,
       x_expand: true,
-      y_align: Clutter.ActorAlign.END,
+    });
+    this._taskListDropdownLabel.clutter_text.set_ellipsize(3); // Pango.EllipsizeMode.END
+
+    const dropdownIcon = new St.Icon({
+      icon_name: 'pan-down-symbolic',
+      icon_size: 12,
+    });
+
+    const dropdownContent = new St.BoxLayout({
+      x_expand: true,
+      y_align: Clutter.ActorAlign.CENTER,
+    });
+    dropdownContent.add_child(this._taskListDropdownLabel);
+    dropdownContent.add_child(dropdownIcon);
+
+    this._taskListDropdownButton = new St.Button({
+      style_class: 'google-tasks-dropdown-button',
+      can_focus: true,
+      x_expand: true,
+      child: dropdownContent,
+    });
+
+    this._taskListDropdownMenu = new PopupMenu.PopupMenu(this._taskListDropdownButton, 0.0, St.Side.TOP);
+    Main.uiGroup.add_child(this._taskListDropdownMenu.actor);
+    this._taskListDropdownMenu.actor.hide();
+
+    this._taskListDropdownMenuManager = new PopupMenu.PopupMenuManager(this);
+    this._taskListDropdownMenuManager.addMenu(this._taskListDropdownMenu);
+
+    this._taskListDropdownButton.connect('clicked', () => {
+      this._taskListDropdownMenu.toggle();
+      return Clutter.EVENT_STOP;
     });
 
     const addButton = new St.Button({
@@ -190,16 +224,9 @@ const TasksSection = GObject.registerClass({
       return Clutter.EVENT_STOP;
     });
 
-    titleBox.add_child(this._titleLabel);
+    titleBox.add_child(this._taskListDropdownButton);
     titleBox.add_child(addButton);
     box.add_child(titleBox);
-
-    this._tabsBox = new St.BoxLayout({
-      style_class: 'google-tasks-tabs',
-      orientation: Clutter.Orientation.HORIZONTAL,
-      x_expand: true,
-    });
-    box.add_child(this._tabsBox);
 
     this._tasksList = new St.BoxLayout({
       style_class: 'tasks-list',
@@ -208,35 +235,36 @@ const TasksSection = GObject.registerClass({
     });
 
     box.add_child(this._tasksList);
+
+    this.connect('destroy', () => {
+      this._taskListDropdownMenu.destroy();
+    });
   }
 
   setTaskLists(taskLists: GoogleTaskList[], selectedTaskListId: string, onSelect: (taskListId: string) => void) {
-    this._tabsBox.destroy_all_children();
+    this._taskListDropdownMenu.removeAll();
+
+    if (taskLists.length === 0) {
+      this._taskListDropdownLabel.set_text('No task lists');
+      this._taskListDropdownButton.reactive = false;
+      this._taskListDropdownMenu.close();
+      return;
+    }
+
+    this._taskListDropdownButton.reactive = true;
+    const selectedTaskList = taskLists.find(list => list.id === selectedTaskListId) ?? taskLists[0];
+    this._taskListDropdownLabel.set_text(selectedTaskList.title);
 
     for (const list of taskLists) {
-      const label = new St.Label({
-        text: list.title,
-        y_align: Clutter.ActorAlign.CENTER,
-        x_expand: true,
-      });
-      label.clutter_text.set_ellipsize(3); // Pango.EllipsizeMode.END
-
-      const tab = new St.Button({
-        style_class: 'google-tasks-tab',
-        can_focus: true,
-        x_expand: true,
-        child: label,
-      });
-
+      const dropdownItem = new PopupMenu.PopupMenuItem(list.title);
       if (list.id === selectedTaskListId)
-        tab.add_style_class_name('google-tasks-tab-active');
+        dropdownItem.setOrnament(PopupMenu.Ornament.CHECK);
 
-      tab.connect('clicked', () => {
+      dropdownItem.connect('activate', () => {
         onSelect(list.id);
-        return Clutter.EVENT_STOP;
       });
 
-      this._tabsBox.add_child(tab);
+      this._taskListDropdownMenu.addMenuItem(dropdownItem);
     }
   }
 
