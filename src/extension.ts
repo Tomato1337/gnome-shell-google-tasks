@@ -1,4 +1,4 @@
-import type { GoogleTask } from './tasksManager.js';
+import type { GoogleTask, GoogleTaskList } from './tasksManager.js';
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -149,6 +149,7 @@ const TasksSection = GObject.registerClass({
   },
 }, class TasksSection extends St.Button {
   private _titleLabel!: St.Label;
+  private _tabsBox!: St.BoxLayout;
   private _tasksList!: St.BoxLayout;
 
   _init() {
@@ -193,6 +194,13 @@ const TasksSection = GObject.registerClass({
     titleBox.add_child(addButton);
     box.add_child(titleBox);
 
+    this._tabsBox = new St.BoxLayout({
+      style_class: 'google-tasks-tabs',
+      orientation: Clutter.Orientation.HORIZONTAL,
+      x_expand: true,
+    });
+    box.add_child(this._tabsBox);
+
     this._tasksList = new St.BoxLayout({
       style_class: 'tasks-list',
       orientation: Clutter.Orientation.VERTICAL,
@@ -200,6 +208,36 @@ const TasksSection = GObject.registerClass({
     });
 
     box.add_child(this._tasksList);
+  }
+
+  setTaskLists(taskLists: GoogleTaskList[], selectedTaskListId: string, onSelect: (taskListId: string) => void) {
+    this._tabsBox.destroy_all_children();
+
+    for (const list of taskLists) {
+      const label = new St.Label({
+        text: list.title,
+        y_align: Clutter.ActorAlign.CENTER,
+        x_expand: true,
+      });
+      label.clutter_text.set_ellipsize(3); // Pango.EllipsizeMode.END
+
+      const tab = new St.Button({
+        style_class: 'google-tasks-tab',
+        can_focus: true,
+        x_expand: true,
+        child: label,
+      });
+
+      if (list.id === selectedTaskListId)
+        tab.add_style_class_name('google-tasks-tab-active');
+
+      tab.connect('clicked', () => {
+        onSelect(list.id);
+        return Clutter.EVENT_STOP;
+      });
+
+      this._tabsBox.add_child(tab);
+    }
   }
 
   addTask(task: GoogleTask, onComplete?: (task: GoogleTask) => void, onEdit?: (task: GoogleTask) => void) {
@@ -306,6 +344,9 @@ export default class GoogleTasksExtension extends Extension {
   private _tasksSection: TasksSectionInstance | null = null;
   private _tasksManager: GoogleTasksManager | null = null;
   private _refreshTimerId: number | null = null;
+  private _selectedTaskListId: string | null = null;
+  private _taskLists: GoogleTaskList[] = [];
+  private _tasksByListId: Map<string, GoogleTask[]> = new Map();
 
   enable() {
     this._tasksSection = new TasksSection();
@@ -345,17 +386,17 @@ export default class GoogleTasksExtension extends Extension {
   _showAddTaskDialog() {
     const dialog = new AddTaskDialog();
     dialog.connect('task-created', (_dialog: any, title: string, description: string) => {
-      this._onAddTask(title, description);
+      this._onAddTask(title, description, this._selectedTaskListId ?? undefined);
     });
     dialog.open();
   }
 
-  async _onAddTask(title: string, description: string) {
+  async _onAddTask(title: string, description: string, taskListId?: string) {
     if (!this._tasksManager)
       return;
 
     try {
-      await this._tasksManager.createTask(title, description || undefined);
+      await this._tasksManager.createTask(title, description || undefined, taskListId);
       this._refreshTasks();
     }
     catch (e) {
@@ -378,30 +419,66 @@ export default class GoogleTasksExtension extends Extension {
     }
   }
 
+  _renderCurrentTaskList() {
+    if (!this._tasksSection)
+      return;
+
+    if (this._taskLists.length === 0) {
+      this._tasksSection.setTaskLists([], '', () => {});
+      this._tasksSection.clearTasks();
+      this._tasksSection.addTask({ id: '', title: 'No task lists found', status: 'none' });
+      return;
+    }
+
+    if (!this._selectedTaskListId || !this._taskLists.some(l => l.id === this._selectedTaskListId))
+      this._selectedTaskListId = this._taskLists[0].id;
+
+    const selectedTaskListId = this._selectedTaskListId;
+    this._tasksSection.setTaskLists(this._taskLists, selectedTaskListId, (taskListId) => {
+      this._selectedTaskListId = taskListId;
+      this._renderCurrentTaskList();
+    });
+
+    const tasks = this._tasksByListId.get(selectedTaskListId) ?? [];
+    this._tasksSection.clearTasks();
+
+    if (tasks.length === 0) {
+      this._tasksSection.addTask({ id: '', title: 'No tasks found', status: 'none' });
+      return;
+    }
+
+    for (const task of tasks) {
+      if (task.title)
+        this._tasksSection.addTask(task, t => this._onTaskCompleted(t), t => this._onTaskEdit(t));
+    }
+  }
+
   async _refreshTasks() {
     if (!this._tasksSection || !this._tasksManager) {
       Main.notify('Google Tasks Extension', 'Failed to init tasks section or manager.');
       return;
     }
 
-    const tasks: GoogleTask[] = await this._tasksManager.getTasks();
+    const taskLists = await this._tasksManager.getTaskLists();
+    const allTasks = await this._tasksManager.getTasks();
 
     // Guard against being disabled while fetching
     if (!this._tasksSection || !this._tasksManager)
       return;
 
-    this._tasksSection.clearTasks();
+    this._taskLists = taskLists;
+    this._tasksByListId = new Map(taskLists.map(list => [list.id, []] as [string, GoogleTask[]]));
 
-    if (tasks.length === 0) {
-      this._tasksSection.addTask({ id: '', title: 'No tasks found', status: 'none' });
+    for (const task of allTasks) {
+      if (!task.taskListId)
+        continue;
+
+      const listTasks = this._tasksByListId.get(task.taskListId);
+      if (listTasks)
+        listTasks.push(task);
     }
-    else {
-      for (const task of tasks) {
-        if (task.title) {
-          this._tasksSection.addTask(task, t => this._onTaskCompleted(t), t => this._onTaskEdit(t));
-        }
-      }
-    }
+
+    this._renderCurrentTaskList();
   }
 
   _onTaskEdit(task: GoogleTask) {
@@ -415,7 +492,7 @@ export default class GoogleTasksExtension extends Extension {
       if (!this._tasksManager || !task.taskListId)
         return;
       try {
-        await this._tasksManager.updateTask(task.taskListId, task.id, title, description || undefined);
+        await this._tasksManager.updateTask(task.taskListId, task.id, title, description);
         this._refreshTasks();
       }
       catch (e) {
@@ -444,6 +521,10 @@ export default class GoogleTasksExtension extends Extension {
 
   disable() {
     this._stopRefreshTimer();
+
+    this._selectedTaskListId = null;
+    this._taskLists = [];
+    this._tasksByListId.clear();
 
     if (this._tasksManager) {
       this._tasksManager.destroy();

@@ -76,3 +76,37 @@
     color: rgba(255, 255, 255, 1);
     background-color: rgba(255, 255, 255, 0.1);
 }
+
+.google-tasks-tabs {
+    spacing: 0px;
+    padding: 2px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    margin-top: 2px;
+}
+
+.google-tasks-tab {
+    padding: 4px 10px;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.6);
+    background-color: transparent;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 2px;
+}
+
+.google-tasks-tab:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.google-tasks-tab-active {
+    color: rgba(255, 255, 255, 0.95);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.google-tasks-tab-active:hover {
+    color: rgba(255, 255, 255, 1);
+    background-color: rgba(255, 255, 255, 0.05);
+}

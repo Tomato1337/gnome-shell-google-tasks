@@ -13,10 +13,10 @@
     "skipLibCheck": true
   },
   "files": [
-    "extension.ts",
-    "tasksManager.ts"
+    "src/extension.ts",
+    "src/tasksManager.ts"
   ],
   "include": [
-    "ambient.d.ts"
+    "src/ambient.d.ts"
   ]
 }

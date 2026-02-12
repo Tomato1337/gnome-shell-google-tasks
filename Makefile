@@ -1,23 +1,28 @@
 UUID = googletasks@ztluwu.dev
+DIST_ASSETS = dist/metadata.json dist/stylesheet.css
 
 .PHONY: all pack install clean
 
-all: dist/extension.js
+all: dist/extension.js $(DIST_ASSETS)
 
 bun.lock: package.json
 	bun install
 
-dist/extension.js: bun.lock *.ts
+dist/extension.js: bun.lock src/*.ts src/*.d.ts
 	bun run build
 
-$(UUID).zip: dist/extension.js
+dist/metadata.json: metadata.json
 	@cp metadata.json dist/
-	@cp stylesheet.css dist/
+
+dist/stylesheet.css: src/stylesheet.css
+	@cp src/stylesheet.css dist/
+
+$(UUID).zip: dist/extension.js $(DIST_ASSETS)
 	@(cd dist && zip ../$(UUID).zip -9r .)
 
 pack: $(UUID).zip
 
-install: $(UUID).zip
+install: $(DIST_ASSETS) $(UUID).zip
 	@gnome-extensions install --force $(UUID).zip
 
 clean:

@@ -52,6 +52,40 @@ export class GoogleTasksManager {
     return accessToken;
   }
 
+  async getTaskLists(): Promise<GoogleTaskList[]> {
+    try {
+      const accessToken = await this._getAccessToken();
+
+      const listsUrl = 'https://tasks.googleapis.com/tasks/v1/users/@me/lists';
+      const listsData = await this._jsonRequest<GoogleTaskListsResponse>(listsUrl, accessToken);
+      return listsData.items ?? [];
+    }
+    catch (e) {
+      if (e instanceof GLib.Error && !e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+        console.error(`Google Tasks Error: ${e.message}`);
+      else if (e instanceof Error)
+        console.error(`Google Tasks Error: ${e.message}`);
+      return [];
+    }
+  }
+
+  async getTasksForList(taskListId: string): Promise<GoogleTask[]> {
+    try {
+      const accessToken = await this._getAccessToken();
+
+      const tasksUrl = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks?showCompleted=false&showHidden=false`;
+      const tasksData = await this._jsonRequest<GoogleTasksResponse>(tasksUrl, accessToken);
+      return (tasksData.items ?? []).map(t => ({ ...t, taskListId }));
+    }
+    catch (e) {
+      if (e instanceof GLib.Error && !e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+        console.error(`Google Tasks Error: ${e.message}`);
+      else if (e instanceof Error)
+        console.error(`Google Tasks Error: ${e.message}`);
+      return [];
+    }
+  }
+
   async getTasks(): Promise<GoogleTask[]> {
     try {
       const accessToken = await this._getAccessToken();
@@ -60,23 +94,19 @@ export class GoogleTasksManager {
       const listsUrl = 'https://tasks.googleapis.com/tasks/v1/users/@me/lists';
       const listsData = await this._jsonRequest<GoogleTaskListsResponse>(listsUrl, accessToken);
 
-      let allTasks: GoogleTask[] = [];
-      if (listsData.items) {
-        for (const list of listsData.items) {
-          const tasksUrl = `https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?showCompleted=false&showHidden=false`;
-          try {
-            const tasksData = await this._jsonRequest<GoogleTasksResponse>(tasksUrl, accessToken);
-            if (tasksData.items) {
-              const tasksWithListId = tasksData.items.map(t => ({ ...t, taskListId: list.id }));
-              allTasks = allTasks.concat(tasksWithListId);
-            }
-          }
-          catch (error) {
-            console.error(`Google Tasks: Failed to fetch tasks for list ${list.title}: ${error instanceof Error ? error.message : String(error)}`);
-          }
+      const lists = listsData.items ?? [];
+      const tasksByList = await Promise.all(lists.map(async (list) => {
+        const tasksUrl = `https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?showCompleted=false&showHidden=false`;
+        try {
+          const tasksData = await this._jsonRequest<GoogleTasksResponse>(tasksUrl, accessToken);
+          return (tasksData.items ?? []).map(t => ({ ...t, taskListId: list.id }));
         }
-      }
-      return allTasks;
+        catch (error) {
+          console.error(`Google Tasks: Failed to fetch tasks for list ${list.title}: ${error instanceof Error ? error.message : String(error)}`);
+          return [] as GoogleTask[];
+        }
+      }));
+      return tasksByList.flat();
     }
     catch (e) {
       if (e instanceof GLib.Error && !e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
@@ -89,18 +119,22 @@ export class GoogleTasksManager {
     }
   }
 
-  async createTask(title: string, notes?: string): Promise<void> {
+  async createTask(title: string, notes?: string, taskListId?: string): Promise<void> {
     try {
       const accessToken = await this._getAccessToken();
 
-      // Get the first task list
-      const listsUrl = 'https://tasks.googleapis.com/tasks/v1/users/@me/lists';
-      const listsData = await this._jsonRequest<GoogleTaskListsResponse>(listsUrl, accessToken);
-      if (!listsData.items || listsData.items.length === 0)
-        throw new Error('No task lists found');
+      let resolvedTaskListId = taskListId;
+      if (!resolvedTaskListId) {
+        // Fallback to the first task list
+        const listsUrl = 'https://tasks.googleapis.com/tasks/v1/users/@me/lists';
+        const listsData = await this._jsonRequest<GoogleTaskListsResponse>(listsUrl, accessToken);
+        if (!listsData.items || listsData.items.length === 0)
+          throw new Error('No task lists found');
 
-      const taskListId = listsData.items[0].id;
-      const url = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks`;
+        resolvedTaskListId = listsData.items[0].id;
+      }
+
+      const url = `https://tasks.googleapis.com/tasks/v1/lists/${resolvedTaskListId}/tasks`;
       const body: Record<string, string> = { title };
       if (notes)
         body.notes = notes;
