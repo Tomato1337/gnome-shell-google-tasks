@@ -1,15 +1,24 @@
-# gnome-shell-google-tasks
+<div align="center">
 
-To install dependencies:
+  # Google Tasks for Gnome
 
-```bash
-bun install
-```
+  A Gnome shell extension to manage your [Google Tasks](https://tasks.google.com) directly from a notification panel widget.
 
-To run:
+  <img src="assets/screenshot.png" alt="Google Tasks for Gnome Screenshot" width="600">
 
-```bash
-bun run
-```
+</div>
 
-This project was created using `bun init` in bun v1.3.9. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Features
+
+- View your Google Tasks in a notification panel widget
+- Add new tasks
+- Mark tasks as completed
+- Sync with Google Tasks in real-time
+
+## License
+
+[MIT](https://github.com/ZTL-UwU/gnome-shell-google-tasks/blob/main/LICENSE)
+
+---
+
+<a href='https://ko-fi.com/T6T7R1M58' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi3.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
