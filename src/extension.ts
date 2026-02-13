@@ -1,3 +1,4 @@
+import type Gio from 'gi://Gio';
 import type { GoogleTask, GoogleTaskList } from './tasksManager.js';
 
 import Clutter from 'gi://Clutter';
@@ -367,10 +368,13 @@ const TasksSection = GObject.registerClass({
 type TasksSectionInstance = InstanceType<typeof TasksSection>;
 
 const REFRESH_INTERVAL_SECONDS = 20; // 20 seconds
+const REFRESH_INTERVAL_KEY = 'refresh-interval';
 
 export default class GoogleTasksExtension extends Extension {
   private _tasksSection: TasksSectionInstance | null = null;
   private _tasksManager: GoogleTasksManager | null = null;
+  private _settings: Gio.Settings | null = null;
+  private _settingsChangedId: number | null = null;
   private _refreshTimerId: number | null = null;
   private _taskCompleteRefreshTimerId: number | null = null;
   private _selectedTaskListId: string | null = null;
@@ -378,6 +382,7 @@ export default class GoogleTasksExtension extends Extension {
   private _tasksByListId: Map<string, GoogleTask[]> = new Map();
 
   enable() {
+    this._settings = this.getSettings();
     this._tasksSection = new TasksSection();
     this._tasksManager = new GoogleTasksManager();
     const dateMenu = Main.panel.statusArea.dateMenu as any;
@@ -408,8 +413,22 @@ export default class GoogleTasksExtension extends Extension {
       this._showAddTaskDialog();
     });
 
+    if (this._settings) {
+      this._settingsChangedId = this._settings.connect(`changed::${REFRESH_INTERVAL_KEY}`, () => {
+        this._startRefreshTimer();
+      });
+    }
+
     this._refreshTasks();
     this._startRefreshTimer();
+  }
+
+  _getRefreshIntervalSeconds() {
+    if (!this._settings)
+      return REFRESH_INTERVAL_SECONDS;
+
+    const configuredInterval = this._settings.get_int(REFRESH_INTERVAL_KEY);
+    return configuredInterval > 0 ? configuredInterval : REFRESH_INTERVAL_SECONDS;
   }
 
   _showAddTaskDialog() {
@@ -435,7 +454,7 @@ export default class GoogleTasksExtension extends Extension {
 
   _startRefreshTimer() {
     this._stopRefreshTimer();
-    this._refreshTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, REFRESH_INTERVAL_SECONDS, () => {
+    this._refreshTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, this._getRefreshIntervalSeconds(), () => {
       this._refreshTasks();
       return GLib.SOURCE_CONTINUE;
     });
@@ -564,6 +583,12 @@ export default class GoogleTasksExtension extends Extension {
   disable() {
     this._stopRefreshTimer();
     this._stopTaskCompleteRefreshTimer();
+
+    if (this._settings && this._settingsChangedId !== null) {
+      this._settings.disconnect(this._settingsChangedId);
+      this._settingsChangedId = null;
+    }
+    this._settings = null;
 
     this._selectedTaskListId = null;
     this._taskLists = [];

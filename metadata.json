@@ -6,6 +6,7 @@
   "shell-version": [
     "49"
   ],
+  "settings-schema": "org.gnome.shell.extensions.googletasks",
   "version": 2,
   "donations": {
     "kofi": "ztl_uwu"

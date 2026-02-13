@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.googletasks" path="/org/gnome/shell/extensions/googletasks/">
+    <key name="refresh-interval" type="i">
+      <default>20</default>
+      <range min="5" max="3600"/>
+      <summary>Refresh interval in seconds</summary>
+      <description>How often to refresh tasks from Google Tasks.</description>
+    </key>
+  </schema>
+</schemalist>

@@ -8,7 +8,6 @@
 
 A Gnome shell extension to manage your [Google Tasks](https://tasks.google.com) directly from a notification panel widget. _This extension is not affiliated, funded, or in any way associated with Google._
 
-
 ## Installation
 
 [<img width="200" src="https://github.com/andyholmes/gnome-shell-extensions-badge/raw/master/get-it-on-ego.png">](https://extensions.gnome.org/extension/9322/google-tasks/)
@@ -24,6 +23,7 @@ A Gnome shell extension to manage your [Google Tasks](https://tasks.google.com) 
 - Add new tasks
 - Mark tasks as completed
 - Sync with Google Tasks in real-time
+- Configure the refresh interval from extension preferences
 
 ## License
 
