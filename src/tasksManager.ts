@@ -11,6 +11,9 @@ export interface GoogleTask {
   notes?: string;
   status: string;
   taskListId?: string;
+  due?: string;
+  updated?: string;
+  position?: string;
 }
 
 export interface GoogleTaskList {
@@ -69,11 +72,12 @@ export class GoogleTasksManager {
     }
   }
 
-  async getTasksForList(taskListId: string): Promise<GoogleTask[]> {
+  async getTasksForList(taskListId: string, includeCompleted: boolean = false): Promise<GoogleTask[]> {
     try {
       const accessToken = await this._getAccessToken();
 
-      const tasksUrl = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks?showCompleted=false&showHidden=false`;
+      const showCompletedParam = includeCompleted ? 'true' : 'false';
+      const tasksUrl = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks?showCompleted=${showCompletedParam}&showHidden=false`;
       const tasksData = await this._jsonRequest<GoogleTasksResponse>(tasksUrl, accessToken);
       return (tasksData.items ?? []).map(t => ({ ...t, taskListId }));
     }
@@ -86,7 +90,7 @@ export class GoogleTasksManager {
     }
   }
 
-  async getTasks(): Promise<GoogleTask[]> {
+  async getTasks(includeCompleted: boolean = false): Promise<GoogleTask[]> {
     try {
       const accessToken = await this._getAccessToken();
 
@@ -95,8 +99,9 @@ export class GoogleTasksManager {
       const listsData = await this._jsonRequest<GoogleTaskListsResponse>(listsUrl, accessToken);
 
       const lists = listsData.items ?? [];
+      const showCompletedParam = includeCompleted ? 'true' : 'false';
       const tasksByList = await Promise.all(lists.map(async (list) => {
-        const tasksUrl = `https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?showCompleted=false&showHidden=false`;
+        const tasksUrl = `https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?showCompleted=${showCompletedParam}&showHidden=false`;
         try {
           const tasksData = await this._jsonRequest<GoogleTasksResponse>(tasksUrl, accessToken);
           return (tasksData.items ?? []).map(t => ({ ...t, taskListId: list.id }));
@@ -154,6 +159,18 @@ export class GoogleTasksManager {
     }
     catch (e) {
       console.error(`Google Tasks: Failed to complete task: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async uncompleteTask(taskListId: string, taskId: string): Promise<void> {
+    try {
+      const accessToken = await this._getAccessToken();
+
+      const url = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks/${taskId}`;
+      await this._jsonRequest(url, accessToken, 'PATCH', { status: 'needsAction' });
+    }
+    catch (e) {
+      console.error(`Google Tasks: Failed to mark task as unfinished: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

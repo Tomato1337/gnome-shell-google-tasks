@@ -92,3 +92,27 @@
     background-color: rgba(255, 255, 255, 0.12);
 }
 
+.tasks-completed-toggle {
+    margin-top: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
+.tasks-completed-toggle:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.tasks-completed-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.tasks-completed-chevron {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.tasks-completed-list {
+    padding-top: 2px;
+}
+

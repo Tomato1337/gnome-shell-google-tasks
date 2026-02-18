@@ -154,7 +154,11 @@ const TasksSection = GObject.registerClass({
   private _taskListDropdownLabel!: St.Label;
   private _taskListDropdownMenu!: PopupMenu.PopupMenu;
   private _taskListDropdownMenuManager!: PopupMenu.PopupMenuManager;
-  private _tasksList!: St.BoxLayout;
+  private _activeTasksList!: St.BoxLayout;
+  private _completedHeaderButton!: St.Button;
+  private _completedChevronIcon!: St.Icon;
+  private _completedTasksList!: St.BoxLayout;
+  private _completedExpanded: boolean = false;
 
   _init() {
     super._init({
@@ -229,13 +233,53 @@ const TasksSection = GObject.registerClass({
     titleBox.add_child(addButton);
     box.add_child(titleBox);
 
-    this._tasksList = new St.BoxLayout({
+    this._activeTasksList = new St.BoxLayout({
       style_class: 'tasks-list',
       orientation: Clutter.Orientation.VERTICAL,
       x_expand: true,
     });
 
-    box.add_child(this._tasksList);
+    box.add_child(this._activeTasksList);
+
+    const completedHeaderContent = new St.BoxLayout({
+      x_expand: true,
+      y_align: Clutter.ActorAlign.CENTER,
+    });
+    const completedLabel = new St.Label({
+      text: 'Completed',
+      y_align: Clutter.ActorAlign.CENTER,
+      x_expand: true,
+      style_class: 'tasks-completed-label',
+    });
+    this._completedChevronIcon = new St.Icon({
+      icon_name: 'pan-end-symbolic',
+      icon_size: 12,
+      style_class: 'tasks-completed-chevron',
+    });
+    completedHeaderContent.add_child(completedLabel);
+    completedHeaderContent.add_child(this._completedChevronIcon);
+
+    this._completedHeaderButton = new St.Button({
+      style_class: 'tasks-completed-toggle',
+      can_focus: true,
+      x_expand: true,
+      child: completedHeaderContent,
+      visible: false,
+    });
+    this._completedHeaderButton.connect('clicked', () => {
+      this._setCompletedExpanded(!this._completedExpanded);
+      return Clutter.EVENT_STOP;
+    });
+
+    this._completedTasksList = new St.BoxLayout({
+      style_class: 'tasks-list tasks-completed-list',
+      orientation: Clutter.Orientation.VERTICAL,
+      x_expand: true,
+      visible: false,
+    });
+
+    box.add_child(this._completedHeaderButton);
+    box.add_child(this._completedTasksList);
 
     this.connect('destroy', () => {
       this._taskListDropdownMenu.destroy();
@@ -269,7 +313,13 @@ const TasksSection = GObject.registerClass({
     }
   }
 
-  addTask(task: GoogleTask, onComplete?: (task: GoogleTask) => void, onEdit?: (task: GoogleTask) => void) {
+  private _createTaskRow(
+    task: GoogleTask,
+    isCompleted: boolean,
+    onComplete?: (task: GoogleTask) => void,
+    onUncomplete?: (task: GoogleTask) => void,
+    onEdit?: (task: GoogleTask) => void,
+  ) {
     const box = new St.BoxLayout({
       style_class: 'task-box',
       orientation: Clutter.Orientation.HORIZONTAL,
@@ -289,11 +339,11 @@ const TasksSection = GObject.registerClass({
       style_class: 'task-radio-check',
       icon_size: 15,
     });
-    checkIcon.opacity = 0;
+    checkIcon.opacity = isCompleted ? 255 : 0;
     radio.set_child(checkIcon);
 
     radio.connect('notify::hover', () => {
-      if (!radio.has_style_class_name('task-radio-completed'))
+      if (!isCompleted && !radio.has_style_class_name('task-radio-completed'))
         checkIcon.opacity = radio.hover ? 255 : 0;
     });
 
@@ -322,14 +372,25 @@ const TasksSection = GObject.registerClass({
       textBox.add_child(descLabel);
     }
 
-    radio.connect('clicked', () => {
+    if (isCompleted) {
       radio.add_style_class_name('task-radio-completed');
-      checkIcon.opacity = 255;
       label.add_style_class_name('task-label-completed');
-      radio.reactive = false;
-      if (onComplete)
-        onComplete(task);
-    });
+      radio.connect('clicked', () => {
+        radio.reactive = false;
+        if (onUncomplete)
+          onUncomplete(task);
+      });
+    }
+    else {
+      radio.connect('clicked', () => {
+        radio.add_style_class_name('task-radio-completed');
+        checkIcon.opacity = 255;
+        label.add_style_class_name('task-label-completed');
+        radio.reactive = false;
+        if (onComplete)
+          onComplete(task);
+      });
+    }
 
     const editButton = new St.Button({
       style_class: 'task-edit-button',
@@ -357,11 +418,50 @@ const TasksSection = GObject.registerClass({
     box.add_child(textBox);
     box.add_child(editButton);
 
-    this._tasksList.add_child(box);
+    return box;
+  }
+
+  addTask(task: GoogleTask, onComplete?: (task: GoogleTask) => void, onEdit?: (task: GoogleTask) => void) {
+    const row = this._createTaskRow(task, false, onComplete, undefined, onEdit);
+    this._activeTasksList.add_child(row);
+  }
+
+  addCompletedTask(task: GoogleTask, onUncomplete?: (task: GoogleTask) => void, onEdit?: (task: GoogleTask) => void) {
+    const row = this._createTaskRow(task, true, undefined, onUncomplete, onEdit);
+    this._completedTasksList.add_child(row);
+  }
+
+  setCompletedTasks(tasks: GoogleTask[], onUncomplete?: (task: GoogleTask) => void, onEdit?: (task: GoogleTask) => void) {
+    this._completedTasksList.destroy_all_children();
+
+    if (tasks.length === 0) {
+      this._completedHeaderButton.visible = false;
+      this._completedTasksList.visible = false;
+      return;
+    }
+
+    this._completedHeaderButton.visible = true;
+    for (const task of tasks) {
+      if (task.title)
+        this.addCompletedTask(task, onUncomplete, onEdit);
+    }
+
+    this._setCompletedExpanded(this._completedExpanded);
+  }
+
+  private _setCompletedExpanded(expanded: boolean) {
+    this._completedExpanded = expanded;
+    this._completedTasksList.visible = this._completedExpanded;
+    this._completedChevronIcon.icon_name = this._completedExpanded
+      ? 'pan-down-symbolic'
+      : 'pan-end-symbolic';
   }
 
   clearTasks() {
-    this._tasksList.destroy_all_children();
+    this._activeTasksList.destroy_all_children();
+    this._completedTasksList.destroy_all_children();
+    this._completedHeaderButton.visible = false;
+    this._setCompletedExpanded(false);
   }
 });
 
@@ -369,17 +469,25 @@ type TasksSectionInstance = InstanceType<typeof TasksSection>;
 
 const REFRESH_INTERVAL_SECONDS = 20; // 20 seconds
 const REFRESH_INTERVAL_KEY = 'refresh-interval';
+const TASK_SORT_ORDER_KEY = 'task-sort-order';
+const SHOW_COMPLETED_TASKS_KEY = 'show-completed-tasks';
+
+type TaskSortOrder = 'my-order' | 'date' | 'deadline' | 'starred-recently' | 'title';
+const VALID_TASK_SORT_ORDERS = new Set<TaskSortOrder>(['my-order', 'date', 'deadline', 'starred-recently', 'title']);
 
 export default class GoogleTasksExtension extends Extension {
   private _tasksSection: TasksSectionInstance | null = null;
   private _tasksManager: GoogleTasksManager | null = null;
   private _settings: Gio.Settings | null = null;
   private _settingsChangedId: number | null = null;
+  private _sortOrderChangedId: number | null = null;
+  private _showCompletedChangedId: number | null = null;
   private _refreshTimerId: number | null = null;
   private _taskCompleteRefreshTimerId: number | null = null;
   private _selectedTaskListId: string | null = null;
   private _taskLists: GoogleTaskList[] = [];
-  private _tasksByListId: Map<string, GoogleTask[]> = new Map();
+  private _activeTasksByListId: Map<string, GoogleTask[]> = new Map();
+  private _completedTasksByListId: Map<string, GoogleTask[]> = new Map();
 
   enable() {
     this._settings = this.getSettings();
@@ -416,6 +524,14 @@ export default class GoogleTasksExtension extends Extension {
     if (this._settings) {
       this._settingsChangedId = this._settings.connect(`changed::${REFRESH_INTERVAL_KEY}`, () => {
         this._startRefreshTimer();
+      });
+
+      this._sortOrderChangedId = this._settings.connect(`changed::${TASK_SORT_ORDER_KEY}`, () => {
+        this._renderCurrentTaskList();
+      });
+
+      this._showCompletedChangedId = this._settings.connect(`changed::${SHOW_COMPLETED_TASKS_KEY}`, () => {
+        this._refreshTasks();
       });
     }
 
@@ -503,18 +619,25 @@ export default class GoogleTasksExtension extends Extension {
       this._renderCurrentTaskList();
     });
 
-    const tasks = this._tasksByListId.get(selectedTaskListId) ?? [];
+    const activeTasks = this._sortTasks(this._activeTasksByListId.get(selectedTaskListId) ?? []);
+    const showCompletedTasks = this._getShowCompletedTasks();
+    const completedTasks = showCompletedTasks
+      ? this._sortTasks(this._completedTasksByListId.get(selectedTaskListId) ?? [])
+      : [];
     this._tasksSection.clearTasks();
 
-    if (tasks.length === 0) {
+    if (activeTasks.length === 0 && (!showCompletedTasks || completedTasks.length === 0)) {
       this._tasksSection.addTask({ id: '', title: 'No tasks found', status: 'none' });
       return;
     }
 
-    for (const task of tasks) {
+    for (const task of activeTasks) {
       if (task.title)
         this._tasksSection.addTask(task, t => this._onTaskCompleted(t), t => this._onTaskEdit(t));
     }
+
+    if (showCompletedTasks)
+      this._tasksSection.setCompletedTasks(completedTasks, t => this._onTaskUncompleted(t), t => this._onTaskEdit(t));
   }
 
   async _refreshTasks() {
@@ -523,26 +646,109 @@ export default class GoogleTasksExtension extends Extension {
       return;
     }
 
+    const includeCompletedTasks = this._getShowCompletedTasks();
     const taskLists = await this._tasksManager.getTaskLists();
-    const allTasks = await this._tasksManager.getTasks();
+    const allTasks = await this._tasksManager.getTasks(includeCompletedTasks);
 
     // Guard against being disabled while fetching
     if (!this._tasksSection || !this._tasksManager)
       return;
 
     this._taskLists = taskLists;
-    this._tasksByListId = new Map(taskLists.map(list => [list.id, []] as [string, GoogleTask[]]));
+    this._activeTasksByListId = new Map(taskLists.map(list => [list.id, []] as [string, GoogleTask[]]));
+    this._completedTasksByListId = new Map(taskLists.map(list => [list.id, []] as [string, GoogleTask[]]));
 
     for (const task of allTasks) {
       if (!task.taskListId)
         continue;
 
-      const listTasks = this._tasksByListId.get(task.taskListId);
-      if (listTasks)
-        listTasks.push(task);
+      if (task.status === 'completed') {
+        const completedListTasks = this._completedTasksByListId.get(task.taskListId);
+        if (completedListTasks)
+          completedListTasks.push(task);
+      }
+      else {
+        const activeListTasks = this._activeTasksByListId.get(task.taskListId);
+        if (activeListTasks)
+          activeListTasks.push(task);
+      }
     }
 
     this._renderCurrentTaskList();
+  }
+
+  _getTaskSortOrder(): TaskSortOrder {
+    if (!this._settings)
+      return 'my-order';
+
+    const configuredSortOrder = this._settings.get_string(TASK_SORT_ORDER_KEY);
+    return VALID_TASK_SORT_ORDERS.has(configuredSortOrder as TaskSortOrder)
+      ? configuredSortOrder as TaskSortOrder
+      : 'my-order';
+  }
+
+  _getShowCompletedTasks(): boolean {
+    if (!this._settings)
+      return true;
+
+    return this._settings.get_boolean(SHOW_COMPLETED_TASKS_KEY);
+  }
+
+  _sortTasks(tasks: GoogleTask[]): GoogleTask[] {
+    const sortedTasks = [...tasks];
+    const sortOrder = this._getTaskSortOrder();
+
+    switch (sortOrder) {
+      case 'title':
+        sortedTasks.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'date':
+      case 'starred-recently':
+        sortedTasks.sort((a, b) => this._parseTimestamp(b.updated) - this._parseTimestamp(a.updated));
+        break;
+      case 'deadline':
+        sortedTasks.sort((a, b) => this._compareDeadline(a.due, b.due));
+        break;
+      case 'my-order':
+      default:
+        sortedTasks.sort((a, b) => this._comparePosition(a.position, b.position));
+        break;
+    }
+
+    return sortedTasks;
+  }
+
+  _parseTimestamp(value?: string): number {
+    if (!value)
+      return 0;
+
+    const timestamp = Date.parse(value);
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+  }
+
+  _compareDeadline(left?: string, right?: string): number {
+    const leftTimestamp = this._parseTimestamp(left);
+    const rightTimestamp = this._parseTimestamp(right);
+
+    if (leftTimestamp === 0 && rightTimestamp === 0)
+      return 0;
+    if (leftTimestamp === 0)
+      return 1;
+    if (rightTimestamp === 0)
+      return -1;
+
+    return leftTimestamp - rightTimestamp;
+  }
+
+  _comparePosition(left?: string, right?: string): number {
+    if (!left && !right)
+      return 0;
+    if (!left)
+      return 1;
+    if (!right)
+      return -1;
+
+    return left.localeCompare(right);
   }
 
   _onTaskEdit(task: GoogleTask) {
@@ -580,6 +786,38 @@ export default class GoogleTasksExtension extends Extension {
     }
   }
 
+  async _onTaskUncompleted(task: GoogleTask) {
+    if (!task.taskListId)
+      return;
+
+    const taskListId = task.taskListId;
+
+    const completedTasks = this._completedTasksByListId.get(taskListId);
+    if (completedTasks) {
+      const taskIndex = completedTasks.findIndex(t => t.id === task.id);
+      if (taskIndex >= 0)
+        completedTasks.splice(taskIndex, 1);
+    }
+
+    const activeTasks = this._activeTasksByListId.get(taskListId);
+    if (activeTasks)
+      activeTasks.push({ ...task, status: 'needsAction' });
+
+    this._renderCurrentTaskList();
+
+    if (!this._tasksManager)
+      return;
+
+    try {
+      await this._tasksManager.uncompleteTask(taskListId, task.id);
+      this._refreshTasks();
+    }
+    catch (e) {
+      console.error(`Google Tasks: Failed to mark task unfinished: ${e instanceof Error ? e.message : String(e)}`);
+      this._refreshTasks();
+    }
+  }
+
   disable() {
     this._stopRefreshTimer();
     this._stopTaskCompleteRefreshTimer();
@@ -588,11 +826,22 @@ export default class GoogleTasksExtension extends Extension {
       this._settings.disconnect(this._settingsChangedId);
       this._settingsChangedId = null;
     }
+
+    if (this._settings && this._sortOrderChangedId !== null) {
+      this._settings.disconnect(this._sortOrderChangedId);
+      this._sortOrderChangedId = null;
+    }
+
+    if (this._settings && this._showCompletedChangedId !== null) {
+      this._settings.disconnect(this._showCompletedChangedId);
+      this._showCompletedChangedId = null;
+    }
     this._settings = null;
 
     this._selectedTaskListId = null;
     this._taskLists = [];
-    this._tasksByListId.clear();
+    this._activeTasksByListId.clear();
+    this._completedTasksByListId.clear();
 
     if (this._tasksManager) {
       this._tasksManager.destroy();

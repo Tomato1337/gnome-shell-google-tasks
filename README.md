@@ -22,8 +22,11 @@ A Gnome shell extension to manage your [Google Tasks](https://tasks.google.com) 
 - View your Google Tasks in a notification panel widget
 - Add new tasks
 - Mark tasks as completed
+- View completed tasks in a collapsible section
 - Sync with Google Tasks in real-time
 - Configure the refresh interval from extension preferences
+- Choose how tasks are sorted from extension preferences
+- Toggle completed-task visibility from extension preferences
 
 ## License
 
