@@ -1,8 +1,7 @@
 UUID = googletasks@ztluwu.dev
 SCHEMA_XML = schemas/org.gnome.shell.extensions.googletasks.gschema.xml
 DIST_SCHEMA_XML = dist/schemas/org.gnome.shell.extensions.googletasks.gschema.xml
-DIST_SCHEMAS_COMPILED = dist/schemas/gschemas.compiled
-DIST_ASSETS = dist/metadata.json dist/stylesheet.css $(DIST_SCHEMAS_COMPILED)
+DIST_ASSETS = dist/metadata.json dist/stylesheet.css
 
 .PHONY: all lint-dist pack install clean
 
@@ -23,9 +22,6 @@ dist/stylesheet.css: src/stylesheet.css
 $(DIST_SCHEMA_XML): $(SCHEMA_XML)
 	@mkdir -p dist/schemas
 	@cp $(SCHEMA_XML) $(DIST_SCHEMA_XML)
-
-$(DIST_SCHEMAS_COMPILED): $(DIST_SCHEMA_XML)
-	@glib-compile-schemas dist/schemas
 
 $(UUID).zip: lint-dist dist/extension.js $(DIST_ASSETS)
 	@(cd dist && zip ../$(UUID).zip -9r .)
